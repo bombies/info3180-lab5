@@ -7,6 +7,7 @@ This file creates your application.
 
 from app import app
 from flask import render_template, request, jsonify, send_file
+from werkzeug.utils import secure_filename
 import os
 
 
@@ -22,6 +23,17 @@ def index():
 ###
 # The functions below should be applicable to all Flask apps.
 ###
+# Configuration for file uploads
+UPLOAD_FOLDER = 'uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def save_poster(file):
+    """Save the poster file to the uploads folder and return the filename"""
+    filename = secure_filename(file.filename)
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(file_path)
+    return filename
 
 # Here we define a function to collect form errors from Flask-WTF
 # which we can later use
