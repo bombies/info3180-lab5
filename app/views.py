@@ -7,7 +7,8 @@ This file creates your application.
 
 import os
 
-from flask import jsonify, render_template, request
+from flask import jsonify, request, send_from_directory
+from flask_wtf.csrf import generate_csrf
 from werkzeug.utils import secure_filename
 
 from app import app, db
@@ -20,42 +21,79 @@ from .models import Movie
 ###
 
 
-@app.route("/api/v1/movies")
+@app.route("/api/v1/movies", methods=["POST", "GET"])
 def movies():
     """
     POST endpoint for adding a new movie
     """
-    if request.method != "POST":
+    if request.method != "POST" and request.method != "GET":
         return jsonify({"error": "Method not allowed"}), 405
 
-    form = MovieForm()
+    if request.method == "GET":
+        # Query all movies from the database
+        all_movies = Movie.query.order_by(Movie.created_at.desc()).all()
 
-    if form.validate_on_submit():
-        # Save the poster file
-        poster_filename = save_poster(form.poster.data)
+        # Format the movies for JSON response
+        movies_list = []
+        for movie in all_movies:
+            movies_list.append(
+                {
+                    "id": movie.id,
+                    "title": movie.title,
+                    "description": movie.description,
+                    "poster": f"/api/v1/posters/{movie.poster}",
+                    "created_at": movie.created_at.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                }
+            )
 
-        # Create and save the movie to the database
-        movie = Movie(
-            title=form.title.data,
-            description=form.description.data,
-            poster=poster_filename,
-        )
+        return jsonify({"movies": movies_list})
+    else:
+        form = MovieForm()
 
-        db.session.add(movie)
-        db.session.commit()
+        if form.validate_on_submit():
+            # Save the poster file
+            poster_filename = save_poster(form.poster.data)
 
-        # Return success response
-        return jsonify(
-            {
-                "message": "Movie Successfully added",
-                "title": movie.title,
-                "poster": movie.poster,
-                "description": movie.description,
-            }
-        ), 201
+            # Create and save the movie to the database
+            movie = Movie(
+                title=form.title.data,
+                description=form.description.data,
+                poster=poster_filename,
+            )
 
-    # Return validation errors
-    return jsonify({"errors": form_errors(form)}), 400
+            db.session.add(movie)
+            db.session.commit()
+
+            # Return success response
+            return jsonify(
+                {
+                    "message": "Movie Successfully added",
+                    "title": movie.title,
+                    "poster": movie.poster,
+                    "description": movie.description,
+                }
+            ), 201
+
+        # Return validation errors
+        return jsonify({"errors": form_errors(form)}), 400
+
+
+@app.route("/api/v1/posters/<filename>", methods=["GET"])
+def get_poster(filename):
+    """Serve poster images from the uploads folder"""
+    return send_from_directory(
+        os.path.join(os.getcwd(), UPLOAD_FOLDER),
+        filename,
+        as_attachment=True,
+    )
+
+
+@app.route("/api/v1/csrf-token", methods=["GET"])
+def get_csrf():
+    """Generate and return a CSRF token"""
+    return jsonify({"csrf_token": generate_csrf()})
 
 
 ###
@@ -113,4 +151,4 @@ def add_header(response):
 @app.errorhandler(404)
 def page_not_found(error):
     """Custom 404 page."""
-    return render_template("404.html"), 404
+    return jsonify({"error": "Route not found"}), 404
